@@ -1,19 +1,21 @@
-project(EntityX)
 cmake_minimum_required(VERSION 2.8)
+set(ENTITYX_MAJOR_VERSION 1)
+set(ENTITYX_MINOR_VERSION 1)
+set(ENTITYX_PATCH_VERSION 2)
+set(ENTITYX_VERSION ${ENTITYX_MAJOR_VERSION}.${ENTITYX_MINOR_VERSION}.${ENTITYX_PATCH_VERSION})
+
+project(EntityX)
+
+message("EntityX version ${ENTITYX_VERSION}")
 
 if(NOT DEFINED CMAKE_MACOSX_RPATH)
   set(CMAKE_MACOSX_RPATH 0)
 endif()
 
-set(ENTITYX_MAJOR_VERSION 1)
-set(ENTITYX_MINOR_VERSION 0)
-set(ENTITYX_PATCH_VERSION 1)
-set(ENTITYX_VERSION ${ENTITYX_MAJOR_VERSION}.${ENTITYX_MINOR_VERSION}.${ENTITYX_PATCH_VERSION})
-
 
 include_directories(${CMAKE_CURRENT_LIST_DIR})
 
-set(ENTITYX_BUILD_TESTING false CACHE BOOL "Enable building of tests.")
+set(ENTITYX_BUILD_TESTING true CACHE BOOL "Enable building of tests.")
 set(ENTITYX_RUN_BENCHMARKS false CACHE BOOL "Run benchmarks (in conjunction with -DENTITYX_BUILD_TESTING=1).")
 set(ENTITYX_MAX_COMPONENTS 64 CACHE STRING "Set the maximum number of components.")
 set(ENTITYX_DT_TYPE double CACHE STRING "The type used for delta time in EntityX update methods.")
@@ -23,7 +25,7 @@ include(${CMAKE_ROOT}/Modules/CheckIncludeFile.cmake)
 include(CheckCXXSourceCompiles)
 
 # Default compiler args
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "(GNU|.*Clang)")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pedantic -Werror -Wall -Wextra -Wno-unused-parameter -Wno-error=unused-variable -Wno-error=sign-compare -std=c++11")
 	set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 	set(CMAKE_CXX_FLAGS_MINSIZEREL "-g -Os -DNDEBUG")

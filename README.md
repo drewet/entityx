@@ -1,4 +1,5 @@
-# EntityX - A fast, type-safe C++ Entity Component System [![Build Status](https://travis-ci.org/alecthomas/entityx.png)](https://travis-ci.org/alecthomas/entityx)
+# EntityX - A fast, type-safe C++ Entity Component System [![Build Status](https://travis-ci.org/alecthomas/entityx.png)](https://travis-ci.org/alecthomas/entityx) [![Build status](https://ci.appveyor.com/api/projects/status/qc8s0pqb5ci092iv/branch/master)](https://ci.appveyor.com/project/alecthomas/entityx/branch/master)
+
 
 ***NOTE: The current stable release 1.0.0 breaks backwards compataibility with < 1.0.0. See the [change log](CHANGES.md) for details.***
 
@@ -39,6 +40,8 @@ See the [ChangeLog](https://github.com/alecthomas/entityx/blob/master/CHANGES.md
 
 - [Will Usher](https://github.com/Twinklebear) has also written an [Asteroids clone](https://github.com/Twinklebear/asteroids).
 - [Roc Solid Productions](https://github.com/RocSolidProductions) have written a [space shooter](https://github.com/RocSolidProductions/Space-Shooter)!
+- Giovani Milanez's first [game](https://github.com/giovani-milanez/SpaceTD).
+- [A game](https://github.com/ggc87/BattleCity2014) using Ogre3D and EntityX.
 
 **DEPRECATED - 0.1.x ONLY**
 
@@ -85,9 +88,9 @@ Creating an entity is as simple as:
 ```c++
 #include <entityx/entityx.h>
 
-EntityX entityx;
+entityx::EntityX ex;
 
-entityx::Entity entity = entityx.entities.create();
+entityx::Entity entity = ex.entities.create();
 ```
 
 And destroying an entity is done with:
@@ -109,20 +112,20 @@ entity.destroy();
 
 The general idea with the EntityX interpretation of ECS is to have as little logic in components as possible. All logic should be contained in Systems.
 
-To that end Components are typically [POD types](http://en.wikipedia.org/wiki/Plain_Old_Data_Structures) consisting of self-contained sets of related data. Implementations are [curiously recurring template pattern](http://en.wikipedia.org/wiki/Curiously_recurring_template_pattern) (CRTP) subclasses of `entityx::Component<T>`.
+To that end Components are typically [POD types](http://en.wikipedia.org/wiki/Plain_Old_Data_Structures) consisting of self-contained sets of related data. Components can be any user defined struct/class.
 
 #### Creating components
 
 As an example, position and direction information might be represented as:
 
 ```c++
-struct Position : entityx::Component<Position> {
+struct Position {
   Position(float x = 0.0f, float y = 0.0f) : x(x), y(y) {}
 
   float x, y;
 };
 
-struct Direction : entityx::Component<Direction> {
+struct Direction {
   Direction(float x = 0.0f, float y = 0.0f) : x(x), y(y) {}
 
   float x, y;
@@ -143,8 +146,8 @@ entity.assign<Position>(1.0f, 2.0f);
 To query all entities with a set of components assigned, use ``entityx::EntityManager::entities_with_components()``. This method will return only those entities that have *all* of the specified components associated with them, assigning each component pointer to the corresponding component instance:
 
 ```c++
-Position::Handle position;
-Direction::Handle direction;
+ComponentHandle<Position> position;
+ComponentHandle<Direction> direction;
 for (Entity entity : entities.entities_with_components(position, direction)) {
   // Do things with entity, position and direction.
 }
@@ -153,7 +156,7 @@ for (Entity entity : entities.entities_with_components(position, direction)) {
 To retrieve a component associated with an entity use ``entityx::Entity::component<C>()``:
 
 ```c++
-Position::Handle position = entity.component<Position>();
+ComponentHandle<Position> position = entity.component<Position>();
 if (position) {
   // Do stuff with position
 }
@@ -186,8 +189,8 @@ A basic movement system might be implemented with something like the following:
 ```c++
 struct MovementSystem : public System<MovementSystem> {
   void update(entityx::EntityManager &es, entityx::EventManager &events, TimeDelta dt) override {
-    Position::Handle position;
-    Direction::Handle direction;
+    ComponentHandle<Position> position;
+    ComponentHandle<Direction> direction;
     for (Entity entity : es.entities_with_components(position, direction)) {
       position->x += direction->x * dt;
       position->y += direction->y * dt;
@@ -208,7 +211,7 @@ As an example, we might want to implement a very basic collision system using ou
 First, we define the event type, which for our example is simply the two entities that collided:
 
 ```c++
-struct Collision : public Event<Collision> {
+struct Collision {
   Collision(entityx::Entity left, entityx::Entity right) : left(left), right(right) {}
 
   entityx::Entity left, right;
@@ -223,7 +226,7 @@ Next we implement our collision system, which emits ``Collision`` objects via an
 class CollisionSystem : public System<CollisionSystem> {
  public:
   void update(entityx::EntityManager &es, entityx::EventManager &events, TimeDelta dt) override {
-    Position::Handle left_position, right_position;
+    ComponentHandle<Position> left_position, right_position;
     for (Entity left_entity : es.entities_with_components(left_position)) {
       for (Entity right_entity : es.entities_with_components(right_position)) {
         if (collide(left_position, right_position)) {
@@ -240,7 +243,7 @@ class CollisionSystem : public System<CollisionSystem> {
 Objects interested in receiving collision information can subscribe to ``Collision`` events by first subclassing the CRTP class ``Receiver<T>``:
 
 ```c++
-struct DebugSystem : public System<DebugSystem>, Receiver<DebugSystem> {
+struct DebugSystem : public System<DebugSystem>, public Receiver<DebugSystem> {
   void configure(entityx::EventManager &event_manager) {
     event_manager.subscribe<Collision>(*this);
   }
@@ -324,8 +327,8 @@ while (true) {
 
 EntityX has the following build and runtime requirements:
 
-- A C++ compiler that supports a basic set of C++11 features (ie. Clang >= 3.1, GCC >= 4.7, and Visual C++.
-- For Visual C++ support you will need at least [Visual Studio 2013](http://www.microsoft.com/en-ca/download/details.aspx?id=40787) with [Update 1](http://www.microsoft.com/en-us/download/details.aspx?id=41650) and [Update 2 CTP](http://www.microsoft.com/en-us/download/details.aspx?id=41699) installed.
+- A C++ compiler that supports a basic set of C++11 features (ie. Clang >= 3.1, GCC >= 4.7, and Visual Studio 2015).
+- For Visual C++ support you will need at least [Visual Studio 2015](https://www.visualstudio.com/en-us/downloads/visual-studio-2015-downloads-vs.aspx).
 - [CMake](http://cmake.org/)
 
 ### C++11 compiler and library support

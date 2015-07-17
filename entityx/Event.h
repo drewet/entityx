@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <vector>
 #include <list>
+#include <unordered_map>
 #include <memory>
 #include <utility>
 #include "entityx/config.h"
@@ -31,14 +32,12 @@ class BaseEvent {
 
   virtual ~BaseEvent();
 
-  virtual Family my_family() const = 0;
-
  protected:
   static Family family_counter_;
 };
 
 
-typedef Simple::Signal<void (const BaseEvent*)> EventSignal;
+typedef Simple::Signal<void (const void*)> EventSignal;
 typedef std::shared_ptr<EventSignal> EventSignalPtr;
 typedef std::weak_ptr<EventSignal> EventSignalWeakPtr;
 
@@ -59,8 +58,6 @@ class Event : public BaseEvent {
     static Family family = family_counter_++;
     return family;
   }
-
-  virtual Family my_family() const override { return Derived::family(); }
 };
 
 
@@ -68,9 +65,9 @@ class BaseReceiver {
  public:
   virtual ~BaseReceiver() {
     for (auto connection : connections_) {
-      auto &ptr = connection.first;
+      auto &ptr = connection.second.first;
       if (!ptr.expired()) {
-        ptr.lock()->disconnect(connection.second);
+        ptr.lock()->disconnect(connection.second.second);
       }
     }
   }
@@ -79,7 +76,7 @@ class BaseReceiver {
   std::size_t connected_signals() const {
     std::size_t size = 0;
     for (auto connection : connections_) {
-      if (!connection.first.expired()) {
+      if (!connection.second.first.expired()) {
         size++;
       }
     }
@@ -88,7 +85,7 @@ class BaseReceiver {
 
  private:
   friend class EventManager;
-  std::list<std::pair<EventSignalWeakPtr, std::size_t>> connections_;
+  std::unordered_map<BaseEvent::Family, std::pair<EventSignalWeakPtr, std::size_t>> connections_;
 };
 
 
@@ -127,23 +124,46 @@ class EventManager : entityx::help::NonCopyable {
   template <typename E, typename Receiver>
   void subscribe(Receiver &receiver) {
     void (Receiver::*receive)(const E &) = &Receiver::receive;
-    auto sig = signal_for(E::family());
+    auto sig = signal_for(Event<E>::family());
     auto wrapper = EventCallbackWrapper<E>(std::bind(receive, &receiver, std::placeholders::_1));
     auto connection = sig->connect(wrapper);
     BaseReceiver &base = receiver;
-    base.connections_.push_back(std::make_pair(EventSignalWeakPtr(sig), connection));
+    base.connections_.insert(std::make_pair(Event<E>::family(), std::make_pair(EventSignalWeakPtr(sig), connection)));
   }
 
-  void emit(const BaseEvent &event);
+  /**
+   * Unsubscribe an object in order to not receive events of type E anymore.
+   *
+   * Receivers must have subscribed for event E before unsubscribing from event E.
+   *
+   */
+  template <typename E, typename Receiver>
+  void unsubscribe(Receiver &receiver) {
+    BaseReceiver &base = receiver;
+    // Assert that it has been subscribed before
+    assert(base.connections_.find(Event<E>::family()) != base.connections_.end());
+    auto pair = base.connections_[Event<E>::family()];
+    auto connection = pair.second;
+    auto &ptr = pair.first;
+    if (!ptr.expired()) {
+      ptr.lock()->disconnect(connection);
+    }
+    base.connections_.erase(Event<E>::family());
+  }
+
+  template <typename E>
+  void emit(const E &event) {
+    auto sig = signal_for(Event<E>::family());
+    sig->emit(&event);
+  }
 
   /**
    * Emit an already constructed event.
    */
   template <typename E>
   void emit(std::unique_ptr<E> event) {
-    auto sig = signal_for(E::family());
-    BaseEvent *base = event.get();
-    sig->emit(base);
+    auto sig = signal_for(Event<E>::family());
+    sig->emit(event.get());
   }
 
   /**
@@ -161,9 +181,8 @@ class EventManager : entityx::help::NonCopyable {
   void emit(Args && ... args) {
     // Using 'E event(std::forward...)' causes VS to fail with an internal error. Hack around it.
     E event = E(std::forward<Args>(args) ...);
-    auto sig = signal_for(std::size_t(E::family()));
-    BaseEvent *base = &event;
-    sig->emit(base);
+    auto sig = signal_for(std::size_t(Event<E>::family()));
+    sig->emit(&event);
   }
 
   std::size_t connected_receivers() const {
@@ -186,8 +205,8 @@ class EventManager : entityx::help::NonCopyable {
   // Functor used as an event signal callback that casts to E.
   template <typename E>
   struct EventCallbackWrapper {
-    EventCallbackWrapper(std::function<void(const E &)> callback) : callback(callback) {}
-    void operator()(const BaseEvent* event) { callback(*(static_cast<const E*>(event))); }
+    explicit EventCallbackWrapper(std::function<void(const E &)> callback) : callback(callback) {}
+    void operator()(const void *event) { callback(*(static_cast<const E*>(event))); }
     std::function<void(const E &)> callback;
   };
 
